@@ -1,17 +1,33 @@
 import socket
 import threading
+import struct
 
 BIND_IP = '0.0.0.0'
-BIND_PORT = 9090
+BIND_PORT = 9097
 
 def handle_client(client_socket):
     while 1:
-        request = client_socket.recv(1024)
-        print "[*] Received: " + request
-        client_socket.send('ACK')
-        if (request == "sair"):
-            client_socket.close()
-            return
+        request = client_socket.recv(struct.calcsize('!HHHIIH'))
+        if (len(request) > 0):
+            print "Recebi uma coisa do cliente ", client_socket.getpeername()
+            tipo, origem, destino, seqNo, timestamp, tamanho = struct.unpack('!HHHIIH', request)
+            print "Tipo: ", tipo
+            print "Origem: ", origem
+            print "destino: ", destino
+            print "seqNo: ", seqNo
+            print "timestamp: ", timestamp
+            print "tamanho: ", tamanho
+            
+            if (tamanho > 0):
+                corpo = client_socket.recv(tamanho)
+                print "corpo: ", corpo
+            print "\n\n"        
+#         print "Tipo: " + tipo
+#         print "[*] Received: " + request
+#         client_socket.send('ACK')
+#         if (request == "sair"):
+#             client_socket.close()
+#             return
 
 def tcp_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
