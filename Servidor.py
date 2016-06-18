@@ -1,58 +1,61 @@
 import socket
 import threading
 import struct
+import atexit
+
+import sys
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+
 
 BIND_IP = '0.0.0.0'
-BIND_PORT = 9087
+BIND_PORT = 9000
 
 global listaClientes
 listaClientes = []
 
-def handle_client(client_socket):
-    while 1:
-        request = client_socket.recv(struct.calcsize('!HHHIIH'))
-        if (len(request) > 0):
-            print "Recebi uma coisa do cliente ", client_socket.getpeername()
-            tipo, origem, destino, seqNo, timestamp, tamanho = struct.unpack('!HHHIIH', request)
-            print "Tipo: ", tipo
-            print "Origem: ", origem
-            print "destino: ", destino
-            print "seqNo: ", seqNo
-            print "timestamp: ", timestamp
-            print "tamanho: ", tamanho
-            
+passiveConnection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+def handle_client(conexao):
+    
+    def recebe():
+        resposta = conexao.recv(struct.calcsize('!HHHIIH'))
+        if (len(resposta) > 0):
+            tipo, origem, destino, seqNo, timestamp, tamanho = struct.unpack('!HHHIIH', resposta)
+            corpo = ""
             if (tamanho > 0):
-                corpo = client_socket.recv(tamanho)
-                print "corpo: ", corpo
-            print "\n\n" 
-            
-            if (hasCliente(origem) == False):
-                enviaOK(client_socket,origem, seqNo, timestamp)
-                listaClientes.append([origem, client_socket])
-                print "Novo cliente. ID = ", origem, client_socket.getpeername() 
-            else:
-                novoID = encontraIdDisponivel(origem)
-                enviaOKnovoID(client_socket,origem, seqNo, timestamp, novoID)
-                listaClientes.append([novoID, client_socket])
-                print "Novo cliente. ID = ", novoID, client_socket.getpeername()
-                    
-#         print "Tipo: " + tipo
-#         print "[*] Received: " + request
-#         client_socket.send('ACK')
-#         if (request == "sair"):
-#             client_socket.close()
-#             return
+                corpo = conexao.recv(tamanho)
+            return tipo, origem, destino, seqNo, timestamp, tamanho, corpo
+
+    
+    tipo,origem,_,seqNo,timestamp,_,corpo = recebe()
+    if (tipo == 0):
+        if (hasCliente(origem) == False):
+            enviaOK(conexao, origem, seqNo, timestamp)
+            listaClientes.append([origem, conexao])
+            logging.info("Novo cliente. ID = %d %s", origem, str(conexao.getpeername())) 
+        else:
+            novoID = encontraIdDisponivel(origem)
+            enviaOKnovoID(conexao, origem, seqNo, timestamp, novoID)
+            listaClientes.append([novoID, conexao])
+            logging.info("Novo cliente. ID = %d %s", novoID, str(conexao.getpeername()))
+    
+    tipo,origem,_,seqNo,timestamp,_,corpo = recebe()
+    if (tipo == 1):
+        listaClientes.remove([origem,conexao])
+        print "Removi o cliente ", origem
+
     
 
-
 def tcp_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(( BIND_IP, BIND_PORT))
-    server.listen(5)
+    global passiveConnection
+    passiveConnection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    passiveConnection.bind(( BIND_IP, BIND_PORT))
+    passiveConnection.listen(5)
     print"[*] Listening on %s:%d" % (BIND_IP, BIND_PORT)
 
     while 1:
-        client, addr = server.accept()
+        client, addr = passiveConnection.accept()
         print "[*] Accepted connection from: %s:%d" %(addr[0], addr[1])
         client_handler = threading.Thread(target=handle_client, args=(client,))
         client_handler.start()
@@ -88,6 +91,12 @@ def encontraIdDisponivel(original):
             current += 1
         return current
     
-
+def fecharConexao():
+    global passiveConnection
+    logging.info("Estou fechando a conexao. Auf Wiederhoren!")
+    passiveConnection.close()
+ 
+atexit.register(fecharConexao())
+    
 if __name__ == '__main__':
     tcp_server()
