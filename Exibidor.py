@@ -8,57 +8,40 @@ import atexit
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 HOST = '0.0.0.0'
-PORT = 9089
-ID = 0
-SEQ_NO = 0
+PORT = 9001
 
-
-
-def exibidor():
+class Exibidor:
+    ID = 0
+    seqNo = 0
     conexao = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     conexao.connect((HOST, PORT))
+   
     
-    
+    def __init__(self):
+        atexit.register(self.fecharConexao)
+        self.enviaOI()
+        self.esperaOK()
+        self.emFuncionamento()
         
-
-    def traduzirMensagem(tipo, origem, destino, seqNo, timestamp, corpo):
-        pacote = struct.pack('!HHHIIH', tipo, origem, destino, seqNo, timestamp, len(corpo))
-        pacote += corpo
-        return pacote
     
-    def enviaOI():
-        logging.info(str(conexao.getsockname())+": Mandei OI para o servidor.")
-        envia(traduzirMensagem(0,0,0,SEQ_NO,int(time.time()),""))
+    def enviaOI(self):
+        logging.info(str(self.conexao.getsockname())+": Mandei OI para o servidor.")
+        envia(self.conexao,traduzirMensagem(0,self.ID,0,self.seqNo,int(time.time()),""))
+        self.seqNo += 1
         
-    def esperaOK():
-        global ID
-        tipo,_,_,_,_,_, corpo = recebe()
+    def esperaOK(self):
+        tipo,_,_,_,_,_,corpo = recebe(self.conexao)
         if (tipo == 3):
-            logging.info(str(conexao.getsockname())+": Recebi OK, ID continua %d", ID)
+            logging.info(str(self.conexao.getsockname())+": Recebi OK, ID continua %d", self.ID)
         elif (tipo == 8):
-            ID = int(corpo)
-            logging.info(str(conexao.getsockname())+": Recebi OK, ID novo %d", ID)
+            self.ID = int(corpo)
+            logging.info(str(self.conexao.getsockname())+": Recebi OK, ID novo %d", self.ID)
         return
-    
-    def envia(data):
-        conexao.send(data)
-        global SEQ_NO
-        SEQ_NO += 1
         
-    def recebe():
-        resposta = conexao.recv(struct.calcsize('!HHHIIH'))
-        if (len(resposta) > 0):
-            tipo, origem, destino, seqNo, timestamp, tamanho = struct.unpack('!HHHIIH', resposta)
-            corpo = ""
-            if (tamanho > 0):
-                corpo = conexao.recv(tamanho)
-            return tipo, origem, destino, seqNo, timestamp, tamanho, corpo
-        
-        
-    def emFuncionamento():
-        logging.info("EM FUNCIONAMENTO: EMISSOR %d", ID)
+    def emFuncionamento(self):
+        logging.info("EM FUNCIONAMENTO: EMISSOR %d", self.ID)
         while 1:
-            tipo,origem,_,_,_,_,corpo = recebe()
+            tipo,origem,_,_,_,_,corpo = recebe(self.conexao)
             
             #recebeu MSG
             if (tipo == 2):
@@ -74,24 +57,36 @@ def exibidor():
                 print "Emissores: ", emissores
                 print "Exibidores: ", exibidores
         
-    def fecharConexao():
-        envia(traduzirMensagem(1, ID, 0, SEQ_NO, int(time.time()), ""))
+    def fecharConexao(self):
+        print "fechando conexao"
+        envia(self.conexao,traduzirMensagem(1, self.ID, 0, self.seqNo, int(time.time()), ""))
         logging.info("Enviei FLW para o servidor.")
-        tipo,_,_,seqNo = recebe()
-        while (tipo != 3 and seqNo != SEQ_NO):
-            tipo,_,_,seqNo = recebe()
-        logging.info("Recebi OK. Estou fechando a conexao. Auf Wiederhoren!")
-        conexao.shutdown()
-        conexao.close()
+#         tipo,_,_,seqNo2 = recebe(self.conexao)
+#         while (tipo != 3 and seqNo2 != self.seqNo):
+#             tipo,_,_,seqNo2 = recebe()
+#         logging.info("Recebi OK. Estou fechando a conexao. Auf Wiederhoren!")
+        self.conexao.close()
+
     
     
-    
-    enviaOI()
-    esperaOK()
-    emFuncionamento()
-    fecharConexao()
-    atexit.register(fecharConexao())
+def traduzirMensagem(tipo, origem, destino, seqNo, timestamp, corpo):
+    pacote = struct.pack('!HHHIIH', tipo, origem, destino, seqNo, timestamp, len(corpo))
+    pacote += corpo
+    return pacote
+
+def envia(conexao,data):
+        conexao.send(data)
+
+def recebe(conexao):
+        resposta = conexao.recv(struct.calcsize('!HHHIIH'))
+        if (len(resposta) > 0):
+            tipo, origem, destino, seqNo, timestamp, tamanho = struct.unpack('!HHHIIH', resposta)
+            corpo = ""
+            if (tamanho > 0):
+                corpo = conexao.recv(tamanho)
+            return tipo, origem, destino, seqNo, timestamp, tamanho, corpo
+        
 if __name__ == '__main__':
-    exibidor()
+    Exibidor()
         
     
