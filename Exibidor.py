@@ -2,31 +2,28 @@ import socket
 import random
 import struct
 import time
+import logging
+import sys
 
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 HOST = '0.0.0.0'
-PORT = 9097
+PORT = 9087
 DATA = 'Hello server'
+global ID
+ID = 0
 global SEQ_NO
-
+SEQ_NO = 0
 
 def exibidor():
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect(( HOST, PORT ))
+    global conexao
+    conexao = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    conexao.connect((HOST, PORT))
     
-    SEQ_NO = 0
-    ID = random.randint(1, 999)
+    enviaOI()
+    esperaOK()
     
-   
-    # envia OI
-    data = traduzirMensagem(0,ID,0,SEQ_NO,int(time.time()),"") 
-    client.send(data)
-    SEQ_NO += 1
+    emFuncionamento()
     
-    # envia MSG = "Esta e uma mensagem."
-    data = traduzirMensagem(2,ID,0,SEQ_NO,int(time.time()),"Esta e uma mensagem.") 
-    client.send(data)
-    SEQ_NO += 1
-    # recebe OK do servidor
         
 
 def traduzirMensagem(tipo, origem, destino, seqNo, timestamp, corpo):
@@ -34,6 +31,39 @@ def traduzirMensagem(tipo, origem, destino, seqNo, timestamp, corpo):
     pacote += corpo
     return pacote
 
+def enviaOI():
+    logging.info(str(conexao.getsockname())+": Mandei OI para o servidor.")
+    envia(traduzirMensagem(0,0,0,SEQ_NO,int(time.time()),""))
+    
+
+def esperaOK():
+    global ID
+    tipo, origem, destino, seqNo, timestamp, tamanho, corpo = recebe()
+    if (tipo == 3):
+        logging.info(str(conexao.getsockname())+": Recebi OK, ID continua %d", ID)
+    elif (tipo == 8):
+        ID = int(corpo)
+        logging.info(str(conexao.getsockname())+": Recebi OK, ID novo %d", ID)
+    return
+
+def envia(data):
+    conexao.send(data)
+    global SEQ_NO
+    SEQ_NO += 1
+    
+def recebe():
+    resposta = conexao.recv(struct.calcsize('!HHHIIH'))
+    if (len(resposta) > 0):
+        tipo, origem, destino, seqNo, timestamp, tamanho = struct.unpack('!HHHIIH', resposta)
+        corpo = ""
+        if (tamanho > 0):
+            corpo = conexao.recv(tamanho)
+        return tipo, origem, destino, seqNo, timestamp, tamanho, corpo
+    
+    
+def emFuncionamento():
+    print "em funcionamento"
+    
 if __name__ == '__main__':
     exibidor()
     
